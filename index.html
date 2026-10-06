@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MRM TV</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root { --bg:#0b1020; --ink:#f5f1e8; --gold:#e0a82e; --red:#c8312b; }
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; background:var(--bg); color:var(--ink); font-family:"Trebuchet MS",system-ui,sans-serif; }
+  .stage { position:relative; width:100%; height:100%; background:#000; overflow:hidden; }
+  video { width:100%; height:100%; object-fit:contain; background:#000; }
+  .logo { position:absolute; top:max(12px,env(safe-area-inset-top)); right:12px; height:48px; max-width:30%; object-fit:contain; }
+  .live { position:absolute; top:max(14px,env(safe-area-inset-top)); left:12px; background:var(--red); padding:4px 10px; border-radius:4px; font-weight:700; letter-spacing:.06em; font-size:13px; }
+  .lower { position:absolute; left:0; bottom:max(18px,env(safe-area-inset-bottom)); max-width:90%; border-left:6px solid var(--gold); background:rgba(11,16,32,.88); padding:10px 18px 10px 14px; }
+  .lower b { display:block; font-size:clamp(18px,4.6vw,34px); }
+  .lower span { font-size:clamp(13px,3vw,20px); color:var(--gold); }
+  .msg { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:24px; font-size:18px; background:var(--bg); }
+  .msg.hide { display:none; }
+  button, input { font:inherit; border-radius:8px; border:0; padding:12px 16px; }
+  button { background:var(--gold); color:#1a1405; font-weight:700; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  .panel { position:absolute; left:0; right:0; top:60px; display:flex; flex-direction:column; gap:10px; align-items:center; padding:0 16px; }
+  .panel input { width:min(320px,100%); }
+  #unmute { position:absolute; right:12px; bottom:90px; }
+  .small { font-size:14px; opacity:.85; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <video id="v" autoplay playsinline muted></video>
+  <img class="logo" src="logo.png" alt="" onerror="this.remove()">
+  <div class="live" id="live" hidden>LIVE</div>
+  <div class="lower"><b>Marriage Conference</b><span>Know Your Responsibility</span></div>
+  <div class="msg" id="msg"></div>
+  <button id="unmute" hidden>Tap for sound</button>
+  <div class="panel" id="panel" hidden>
+    <input id="room" placeholder="Secret room code (e.g. mrm2026)" autocomplete="off">
+    <button id="start">Start broadcasting</button>
+    <button id="flip" hidden>Switch camera</button>
+    <button id="share" hidden>Share link on WhatsApp</button>
+    <div class="small" id="count"></div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+/* Network help: STUN is free. Paste TURN details below (e.g. from metered.ca Open Relay) so viewers on strict networks can connect. */
+const TURN = { urls: '', username: '', credential: '' };
+const ICE = { config: { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  ...(TURN.urls ? [TURN] : [])
+] } };
+const v = $('v'), msg = $('msg');
+const params = new URLSearchParams(location.search);
+const isHost = params.has('host');
+const say = t => { msg.textContent = t; msg.classList.toggle('hide', !t); };
+const hostId = room => 'mrmtv-' + room.replace(/[^a-z0-9]/gi,'').toLowerCase();
+
+if (isHost) hostMode(); else viewerMode();
+
+/* ---------- PHONE (broadcaster): open this page with ?host ---------- */
+function hostMode() {
+  $('panel').hidden = false; say('');
+  $('room').value = params.get('room') || '';
+  let stream, peer, facing = 'environment', viewers = new Set();
+
+  async function getCam() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true });
+    v.srcObject = stream;
+  }
+
+  $('start').onclick = async () => {
+    const room = $('room').value.trim();
+    if (room.length < 4) return alert('Use a room code of at least 4 letters or numbers.');
+    try { await getCam(); } catch (e) { return alert('Camera blocked. Allow camera and microphone, then try again.'); }
+    peer = new Peer(hostId(room), ICE);
+    peer.on('error', e => alert(e.type === 'unavailable-id'
+      ? 'This room is already live. Close the other broadcast or pick a new code.' : 'Connection problem: ' + e.type));
+    peer.on('open', () => {
+      $('live').hidden = false; $('start').hidden = true; $('flip').hidden = false; $('share').hidden = false;
+      $('room').hidden = true; $('count').textContent = 'Live. Keep this screen open.';
+    });
+    peer.on('connection', conn => conn.on('open', () => {
+      const call = peer.call(conn.peer, stream);
+      viewers.add(conn.peer); show();
+      const drop = () => { viewers.delete(conn.peer); show(); };
+      call.on('close', drop); conn.on('close', drop);
+    }));
+    const show = () => $('count').textContent = 'Live now. Watching: ' + viewers.size;
+    $('share').onclick = () => {
+      const link = location.origin + location.pathname + '?room=' + encodeURIComponent(room);
+      open('https://wa.me/?text=' + encodeURIComponent('Watch MRM TV live: ' + link));
+    };
+  };
+
+  $('flip').onclick = async () => {
+    facing = facing === 'environment' ? 'user' : 'environment';
+    await getCam();
+    const track = stream.getVideoTracks()[0];
+    Object.values(peer.connections).flat().forEach(c => {
+      const s = c.peerConnection && c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
+      if (s) s.replaceTrack(track);
+    });
+  };
+}
+
+/* ---------- VIEWERS (WhatsApp link): open this page normally ---------- */
+function viewerMode() {
+  const room = params.get('room');
+  if (!room) return say('Open the link shared in the WhatsApp group.');
+  say('Connecting to the live session…');
+  let peer;
+  function join() {
+    peer = new Peer(undefined, ICE);
+    peer.on('open', () => {
+      const conn = peer.connect(hostId(room));
+      const retry = () => { say('Waiting for the broadcast to start…'); $('live').hidden = true; setTimeout(() => { peer.destroy(); join(); }, 4000); };
+      let got = false;
+      setTimeout(() => { if (!got) retry(); }, 10000);
+      conn.on('close', retry);
+    });
+    peer.on('call', call => {
+      call.answer();
+      call.on('stream', s => {
+        v.srcObject = s; v.play().catch(() => {}); say('');
+        $('live').hidden = false; $('unmute').hidden = !v.muted;
+      });
+    });
+    peer.on('error', () => { setTimeout(() => { peer.destroy(); join(); }, 4000); });
+  }
+  join();
+  $('unmute').onclick = () => { v.muted = false; $('unmute').hidden = true; };
+}
+</script>
+</body>
+</html>
