@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MRM TV</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root { --bg:#0b1020; --ink:#f5f1e8; --gold:#e0a82e; --red:#c8312b; }
+  [hidden] { display:none !important; }
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; background:var(--bg); color:var(--ink); font-family:"Trebuchet MS",system-ui,sans-serif; }
+  .stage { position:relative; width:100%; height:100%; background:#000; overflow:hidden; }
+  video { width:100%; height:100%; object-fit:contain; background:#000; }
+  :root { --bar-h: clamp(42px,7.5vw,66px); --plum:#2a0b45; }
+  .badge { position:absolute; top:max(12px,env(safe-area-inset-top)); left:12px; width:clamp(46px,10.5vw,76px); aspect-ratio:1; border-radius:50%; background:radial-gradient(circle at 30% 28%,#e4493f,#8f1a2a); border:3px solid #fff; display:grid; place-items:center; font-weight:900; font-size:clamp(13px,3.2vw,24px); letter-spacing:.02em; overflow:hidden; box-shadow:0 3px 12px rgba(0,0,0,.55); }
+  .badge img { width:100%; height:100%; object-fit:contain; }
+  .badge.has-logo { background:#fff; width:clamp(56px,13vw,92px); }
+  .live { position:absolute; top:max(14px,env(safe-area-inset-top)); right:12px; display:flex; align-items:center; gap:7px; background:var(--red); padding:5px 12px; border-radius:4px; font-weight:800; letter-spacing:.08em; font-size:clamp(12px,2.8vw,18px); box-shadow:0 3px 12px rgba(0,0,0,.5); }
+  .live::before { content:""; width:.6em; height:.6em; border-radius:50%; background:#fff; animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+  .bar { position:absolute; left:0; right:0; bottom:env(safe-area-inset-bottom,0px); height:var(--bar-h); display:flex; background:linear-gradient(180deg,#52187a,var(--plum)); border-top:3px solid #fff; box-shadow:0 -6px 18px rgba(0,0,0,.45); }
+  .tag { position:relative; z-index:2; flex:none; display:flex; align-items:center; background:#fff; color:var(--plum); font-weight:900; letter-spacing:.05em; font-size:clamp(11px,2.7vw,20px); white-space:nowrap; padding:0 clamp(30px,6vw,52px) 0 clamp(10px,2.4vw,18px); clip-path:polygon(0 0,calc(100% - 22px) 0,100% 50%,calc(100% - 22px) 100%,0 100%); }
+  .belt { flex:1; overflow:hidden; display:flex; align-items:center; margin-left:-12px; }
+  .track { display:flex; flex:none; white-space:nowrap; will-change:transform; animation:scroll var(--dur,30s) linear infinite; }
+  .track span { font-weight:700; font-size:clamp(14px,3.5vw,27px); padding-left:1.4em; }
+  .track i { font-style:normal; color:var(--gold); padding:0 1.1em; }
+  @keyframes scroll { to { transform:translateX(-50%); } }
+  .panel input[type=range] { padding:0; accent-color:var(--gold); }
+  .panel input[type=checkbox] { width:20px; height:20px; padding:0; vertical-align:middle; margin-right:6px; accent-color:var(--gold); }
+  #meter { width:min(320px,100%); height:8px; background:rgba(255,255,255,.25); border-radius:4px; overflow:hidden; }
+  #meter i { display:block; height:100%; width:0; background:#4cd964; transition:width .08s; }
+  .recs { position:absolute; inset:0; overflow:auto; padding:max(16px,env(safe-area-inset-top)) 16px 28px; background:var(--bg); }
+  .recs a { color:var(--gold); }
+  .rec { background:#151c33; border-radius:12px; padding:14px; margin:0 0 12px; }
+  .rec video { width:100%; margin-top:10px; border-radius:8px; background:#000; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  button.sec { background:#2a3358; color:var(--ink); }
+  #reclink { color:var(--gold); font-size:15px; }
+  @media (orientation:landscape) and (max-height:560px) {
+    :root { --bar-h:40px; }
+    .panel { top:54px; flex-direction:row; flex-wrap:wrap; justify-content:center; gap:8px; }
+    .panel input, .panel select { width:min(240px,46%); }
+    .panel button, .panel input, .panel select { padding:9px 13px; }
+    .badge, .badge.has-logo { width:50px; }
+    .tag { font-size:12px; }
+    .track span { font-size:16px; }
+    .live { font-size:12px; padding:3px 9px; }
+    .panel input[type=checkbox] { width:20px; }
+  }
+  .msg { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:24px; font-size:18px; background:var(--bg); }
+  .msg.hide { display:none; }
+  button, input, select { font:inherit; border-radius:8px; border:0; padding:12px 16px; }
+  button { background:var(--gold); color:#1a1405; font-weight:700; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  .panel { position:absolute; left:0; right:0; top:clamp(78px,17vw,120px); display:flex; flex-direction:column; gap:10px; align-items:center; padding:0 16px; }
+  .panel input, .panel select { width:min(320px,100%); }
+  #unmute { position:absolute; right:12px; bottom:calc(var(--bar-h) + 16px); }
+  .small { font-size:14px; opacity:.85; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <video id="v" autoplay playsinline muted></video>
+  <div class="badge"><img src="logo.png" alt="" onload="this.parentNode.classList.add('has-logo');this.nextElementSibling.remove()" onerror="this.remove()"><span>MRM</span></div>
+  <div class="live" id="live" hidden>LIVE</div>
+  <div class="bar"><div class="tag">MARRIAGE CONFERENCE</div><div class="belt"><div class="track" id="track"></div></div></div>
+  <div class="msg" id="msg"></div>
+  <button id="unmute" hidden>Tap for sound</button>
+  <div class="recs" id="recs" hidden></div>
+  <div class="panel" id="panel" hidden>
+    <input id="room" placeholder="Secret room code (e.g. mrm2026)" autocomplete="off">
+    <select id="mic" aria-label="Sound input"><option value="">Sound input: automatic (phone or plugged-in sound card)</option></select>
+    <select id="amode" aria-label="Sound type">
+      <option value="speech">Sound: clear speech (recommended)</option>
+      <option value="music">Sound: music / worship</option>
+      <option value="raw">Sound: raw (no processing)</option>
+    </select>
+    <label class="small" for="vol">Mic volume <b id="volv">100%</b></label>
+    <input id="vol" type="range" min="40" max="300" step="5" value="100">
+    <label class="small"><input type="checkbox" id="gate" checked> Reduce background noise</label>
+    <div id="meter" hidden><i></i></div>
+    <select id="quality" aria-label="Recording size">
+      <option value="500000">Small recording (about 250 MB per hour)</option>
+      <option value="1000000">Medium recording (about 470 MB per hour)</option>
+      <option value="2000000">High quality (about 900 MB per hour)</option>
+    </select>
+    <button id="start">Start broadcasting</button>
+    <button id="flip" hidden>Switch camera</button>
+    <button id="share" hidden>Share link on WhatsApp</button>
+    <button id="stop" class="sec" hidden>End live &amp; save recording</button>
+    <a id="reclink" href="?recordings">Saved recordings</a>
+    <div class="small" id="count"></div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+/* Network help: STUN is free. Paste TURN details below (e.g. from metered.ca Open Relay) so viewers on strict networks can connect. */
+const TURN = { urls: '', username: '', credential: '' };
+const ICE = { config: { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  ...(TURN.urls ? [TURN] : [])
+] } };
+/* Scrolling text at the bottom: edit these lines to change what runs on the TV screen. */
+const TICKER = [
+  'Welcome to the Marriage Conference',
+  'Know Your Responsibility',
+  'Muwanguzi Restoration Church',
+  'Giving: MTN 0774888834 (Rose Mbazira)',
+  'Airtel 0709048854 (Rose Mbazira)',
+  'Equity Bank A/C 1035203325762 (Muwanguzi Restoration Church)',
+  'God bless you for joining us live'
+];
+(function () {
+  const track = $('track');
+  const strip = () => { const sp = document.createElement('span'); TICKER.forEach((t, i) => { if (i) { const d = document.createElement('i'); d.textContent = '\u25C6'; sp.append(d); } sp.append(t); }); const d = document.createElement('i'); d.textContent = '\u25C6'; sp.append(d); return sp; };
+  track.append(strip(), strip());
+  requestAnimationFrame(() => { track.style.setProperty('--dur', Math.max(20, (track.scrollWidth / 2) / 90) + 's'); });
+})();
+const v = $('v'), msg = $('msg');
+const params = new URLSearchParams(location.search);
+const isHost = params.has('host');
+const say = t => { msg.textContent = t; msg.classList.toggle('hide', !t); };
+const hostId = room => 'mrmtv-' + room.replace(/[^a-z0-9]/gi,'').toLowerCase();
+
+
+/* ---------- Saving on the phone (IndexedDB) ---------- */
+let _db;
+const db = () => _db || (_db = new Promise((res, rej) => {
+  const r = indexedDB.open('mrmtv', 1);
+  r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('sessions', { keyPath: 'sid' }); d.createObjectStore('chunks', { autoIncrement: true }).createIndex('sid', 'sid'); };
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}));
+const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const dbPut = async (store, val) => { const d = await db(); return req(d.transaction(store, 'readwrite').objectStore(store).put(val)); };
+const dbAll = async store => { const d = await db(); return req(d.transaction(store).objectStore(store).getAll()); };
+const dbChunks = async sid => { const d = await db(); return req(d.transaction('chunks').objectStore('chunks').index('sid').getAll(IDBKeyRange.only(sid))); };
+const dbDelete = async sid => {
+  const d = await db(); const t = d.transaction(['sessions', 'chunks'], 'readwrite');
+  t.objectStore('sessions').delete(sid);
+  const c = t.objectStore('chunks').index('sid').openKeyCursor(IDBKeyRange.only(sid));
+  c.onsuccess = () => { const cur = c.result; if (cur) { t.objectStore('chunks').delete(cur.primaryKey); cur.continue(); } };
+  return new Promise(res => { t.oncomplete = res; });
+};
+const fmt = sec => [sec / 3600 | 0, (sec / 60 | 0) % 60, sec % 60 | 0].map(x => String(x).padStart(2, '0')).join(':');
+
+/* ---------- PHONE (broadcaster): open this page with ?host. Works in portrait and landscape. ---------- */
+function hostMode() {
+  $('panel').hidden = false; say('');
+  $('room').value = params.get('room') || '';
+  try { const q = localStorage.getItem('mrmtv-q'); if (q) $('quality').value = q; } catch (e) {}
+  $('quality').onchange = () => { try { localStorage.setItem('mrmtv-q', $('quality').value); } catch (e) {} };
+  let stream, peer, facing = 'environment', viewers = new Set(), rec, part = 0, sess, t0, lock, tick, live = false, saveFail = false;
+  const pickMime = () => !window.MediaRecorder ? '' : ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const show = () => { $('count').textContent = 'Live ' + fmt((Date.now() - t0) / 1000) + ' | Watching: ' + viewers.size + (!rec ? ' | Not recording (browser cannot record)' : saveFail ? ' | SAVE PROBLEM: phone storage may be full' : ' | Recording saved on this phone'); };
+
+  /* ---- Built-in sound card: filters, noise gate, compressor and limiter, so the sound is clear ---- */
+  let ac, raf, raw, gateTimer, nodes = {};
+  const PRESETS = {
+    speech: { hp: 100, low: -2, mud: -3, pres: 4,   air: 2,   thr: -26, knee: 24, ratio: 3.5, atk: 0.004, rel: 0.22, make: 1.6, gate: true },
+    music:  { hp: 40,  low: 0,  mud: -1, pres: 1.5, air: 1.5, thr: -18, knee: 20, ratio: 2,   atk: 0.015, rel: 0.3,  make: 1.2, gate: false },
+    raw:    { hp: 10,  low: 0,  mud: 0,  pres: 0,   air: 0,   thr: 0,   knee: 0,  ratio: 1,   atk: 0.01,  rel: 0.2,  make: 1,   gate: false }
+  };
+  const preset = () => PRESETS[$('amode').value] || PRESETS.speech;
+  const setVol = () => { $('volv').textContent = $('vol').value + '%'; if (nodes.master) nodes.master.gain.value = $('vol').value / 100 * (nodes.makeup || 1); };
+  function applyPreset(resetGate) {
+    const p = preset(), n = nodes;
+    if (n.hp) {
+      n.hp.frequency.value = p.hp; n.low.gain.value = p.low; n.mud.gain.value = p.mud; n.pres.gain.value = p.pres; n.air.gain.value = p.air;
+      const c = n.comp; c.threshold.value = p.thr; c.knee.value = p.knee; c.ratio.value = p.ratio; c.attack.value = p.atk; c.release.value = p.rel;
+      n.makeup = p.make; setVol();
+    }
+    if (resetGate) $('gate').checked = p.gate;
+  }
+  function buildChain() {
+    ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    ac.resume().catch(() => {});
+    const f = (type, freq, q) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = freq; if (q) b.Q.value = q; return b; };
+    const src = ac.createMediaStreamSource(new MediaStream(raw.getAudioTracks()));
+    const hp = f('highpass', 100, 0.7), low = f('lowshelf', 120), mud = f('peaking', 300, 1), pres = f('peaking', 3200, 0.9), air = f('highshelf', 9000);
+    const sense = ac.createAnalyser(); sense.fftSize = 1024;
+    const gate = ac.createGain(), comp = ac.createDynamicsCompressor(), master = ac.createGain(), lim = ac.createDynamicsCompressor();
+    lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
+    const out = ac.createAnalyser(); out.fftSize = 512;
+    const dest = ac.createMediaStreamDestination();
+    src.connect(hp); hp.connect(sense);
+    hp.connect(low); low.connect(mud); mud.connect(pres); pres.connect(air); air.connect(gate);
+    gate.connect(comp); comp.connect(master); master.connect(lim); lim.connect(out); lim.connect(dest);
+    nodes = { hp, low, mud, pres, air, comp, master };
+    /* gentle noise gate: learns the room's background level and lowers the sound when nobody is speaking */
+    const buf = new Float32Array(sense.fftSize); let floor = -60, hold = 0;
+    gateTimer = setInterval(() => {
+      sense.getFloatTimeDomainData(buf); let sum = 0; for (const x of buf) sum += x * x;
+      const db = 10 * Math.log10(sum / buf.length + 1e-12);
+      floor = Math.min(floor + 0.02, db);
+      const thr = Math.max(-62, Math.min(-36, floor + 10));
+      if (db > thr) hold = 8; else if (hold > 0) hold--;
+      const open = !$('gate').checked || hold > 0;
+      gate.gain.setTargetAtTime(open ? 1 : 0.2, ac.currentTime, open ? 0.01 : 0.12);
+    }, 40);
+    /* level bar shows the processed sound that viewers hear */
+    const lv = new Uint8Array(out.fftSize), bar = $('meter').firstElementChild;
+    $('meter').hidden = false;
+    const loop = () => { out.getByteTimeDomainData(lv); let m = 0; for (const x of lv) m = Math.max(m, Math.abs(x - 128)); bar.style.width = Math.min(100, m / 128 * 140) + '%'; raf = requestAnimationFrame(loop); };
+    loop();
+    return dest.stream.getAudioTracks()[0];
+  }
+  function teardown() {
+    clearInterval(gateTimer); cancelAnimationFrame(raf);
+    if (raw) raw.getTracks().forEach(t => t.stop());
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ac) { ac.close().catch(() => {}); ac = null; }
+    nodes = {};
+  }
+
+  async function refreshMics(ask) {
+    try { if (ask) (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach(t => t.stop()); } catch (e) {}
+    let list = []; try { list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput'); } catch (e) {}
+    const cur = $('mic').value;
+    $('mic').replaceChildren(new Option('Sound input: automatic (phone or plugged-in sound card)', ''));
+    list.forEach((d, i) => $('mic').append(new Option(d.label || 'Sound input ' + (i + 1), d.deviceId)));
+    if ([...$('mic').options].some(o => o.value === cur)) $('mic').value = cur;
+  }
+  try { const m = localStorage.getItem('mrmtv-amode'); if (m && PRESETS[m]) $('amode').value = m; } catch (e) {}
+  $('gate').checked = preset().gate; setVol();
+  $('amode').onchange = () => { try { localStorage.setItem('mrmtv-amode', $('amode').value); } catch (e) {} applyPreset(true); };
+  $('vol').oninput = setVol;
+  refreshMics(true);
+  if (navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (!live) refreshMics(false); });
+
+  async function getCam() {
+    teardown();
+    const mode = $('amode').value, mic = $('mic').value;
+    const audio = exact => ({
+      ...(exact && mic ? { deviceId: { exact: mic } } : {}),
+      echoCancellation: mode === 'speech', noiseSuppression: mode === 'speech', autoGainControl: false,
+      ...(mode === 'music' ? { channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } } : {}) });
+    const video = { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } };
+    try { raw = await navigator.mediaDevices.getUserMedia({ video, audio: audio(true) }); }
+    catch (e) { raw = await navigator.mediaDevices.getUserMedia({ video, audio: audio(false) }); }
+    let at; try { at = buildChain(); } catch (e) { at = raw.getAudioTracks()[0]; }
+    stream = new MediaStream([...raw.getVideoTracks(), ...(at ? [at] : [])]);
+    v.srcObject = stream;
+    applyPreset(false);
+  }
+
+  function startRec() {
+    if (!window.MediaRecorder) return;
+    const p = ++part, mime = pickMime(); let n = 0;
+    try { rec = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: +$('quality').value, audioBitsPerSecond: 48000 }); } catch (e) { rec = null; return; }
+    sess.mime = rec.mimeType || mime;
+    rec.ondataavailable = e => {
+      if (!e.data || !e.data.size) return;
+      sess.bytes += e.data.size; sess.end = Date.now(); sess.parts = p;
+      dbPut('chunks', { sid: sess.sid, part: p, n: n++, blob: e.data }).then(() => dbPut('sessions', sess)).catch(() => { saveFail = true; });
+    };
+    rec.start(5000);
+  }
+  const stopRec = () => new Promise(res => {
+    if (!rec || rec.state === 'inactive') return res();
+    rec.onstop = () => setTimeout(res, 600); rec.stop();
+  });
+
+  $('start').onclick = async () => {
+    const room = $('room').value.trim();
+    if (room.length < 4) return alert('Use a room code of at least 4 letters or numbers.');
+    try { await getCam(); } catch (e) { return alert('Camera blocked. Allow camera and microphone, then try again.'); }
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+    sess = { sid: String(Date.now()), start: Date.now(), end: Date.now(), bytes: 0, parts: 0, mime: '', ended: false };
+    startRec(); dbPut('sessions', sess).catch(() => { saveFail = true; });
+    try { lock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    peer = new Peer(hostId(room), ICE);
+    peer.on('error', e => alert(e.type === 'unavailable-id'
+      ? 'This room is already live. Close the other broadcast or pick a new code.' : 'Connection problem: ' + e.type));
+    peer.on('open', () => {
+      live = true; t0 = Date.now();
+      $('live').hidden = false; $('start').hidden = true; $('flip').hidden = false; $('share').hidden = false; $('stop').hidden = false;
+      $('reclink').hidden = true; $('room').hidden = true; $('quality').hidden = true; $('mic').hidden = true;
+      show(); tick = setInterval(show, 1000);
+    });
+    peer.on('connection', conn => conn.on('open', () => {
+      const call = peer.call(conn.peer, stream);
+      viewers.add(conn.peer);
+      const drop = () => { viewers.delete(conn.peer); };
+      call.on('close', drop); conn.on('close', drop);
+    }));
+    $('share').onclick = () => {
+      const link = location.origin + location.pathname + '?room=' + encodeURIComponent(room);
+      open('https://wa.me/?text=' + encodeURIComponent('Watch MRM TV live: ' + link));
+    };
+  };
+
+  $('flip').onclick = async () => {
+    facing = facing === 'environment' ? 'user' : 'environment';
+    await stopRec();
+    await getCam();
+    startRec();
+    Object.values(peer.connections).flat().forEach(c => {
+      (c.peerConnection ? c.peerConnection.getSenders() : []).forEach(s => {
+        const t = s.track && stream.getTracks().find(x => x.kind === s.track.kind);
+        if (t) s.replaceTrack(t);
+      });
+    });
+  };
+
+  $('stop').onclick = async () => {
+    if (!confirm('End the live and save the recording?')) return;
+    live = false; clearInterval(tick);
+    await stopRec(); sess.ended = true; sess.end = Date.now();
+    await dbPut('sessions', sess).catch(() => {});
+    teardown();
+    try { peer.destroy(); } catch (e) {}
+    try { lock && lock.release(); } catch (e) {} lock = null;
+    location.search = '?recordings';
+  };
+
+  document.addEventListener('visibilitychange', async () => {
+    if (lock && document.visibilityState === 'visible') { try { lock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+  });
+  addEventListener('beforeunload', e => { if (live) { e.preventDefault(); e.returnValue = ''; } });
+}
+
+/* ---------- SAVED LIVE SESSIONS: open this page with ?recordings ---------- */
+async function recView() {
+  document.querySelectorAll('.stage > :not(#recs)').forEach(e => { e.hidden = true; });
+  const box = $('recs'); box.hidden = false; box.replaceChildren();
+  const add = (tag, text, parent) => { const el = document.createElement(tag); el.textContent = text; (parent || box).append(el); return el; };
+  add('h2', 'Saved live sessions').style.margin = '0 0 6px';
+  add('p', 'These are stored on this phone only. Download the ones you want to keep.').className = 'small';
+  const back = add('a', 'Back to broadcaster'); back.href = location.pathname + '?host';
+  let list = [];
+  try { list = (await dbAll('sessions')).sort((x, y) => y.start - x.start); } catch (e) {}
+  if (!list.length) add('p', 'No saved sessions yet.').style.marginTop = '16px';
+  const blobOf = async (s, p) => {
+    const chunks = (await dbChunks(s.sid)).filter(c => c.part === p).sort((x, y) => x.n - y.n);
+    return new Blob(chunks.map(c => c.blob), { type: (s.mime || 'video/webm').split(';')[0] });
+  };
+  list.forEach(s => {
+    const card = document.createElement('div'); card.className = 'rec'; box.append(card);
+    add('b', 'Live on ' + new Date(s.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }), card);
+    add('div', fmt((s.end - s.start) / 1000) + ' | ' + (s.bytes / 1048576).toFixed(0) + ' MB' + (s.ended ? '' : ' | ended unexpectedly (saved up to the last few seconds)'), card).className = 'small';
+    const row = document.createElement('div'); row.className = 'row'; card.append(row);
+    for (let p = 1; p <= Math.max(1, s.parts); p++) {
+      const tag = s.parts > 1 ? ' part ' + p : '';
+      const ext = (s.mime || '').includes('mp4') ? 'mp4' : 'webm';
+      const play = add('button', 'Play' + tag, row);
+      play.onclick = async () => {
+        const old = card.querySelector('video'); if (old) old.remove();
+        const vid = document.createElement('video'); vid.controls = true; vid.playsInline = true;
+        vid.src = URL.createObjectURL(await blobOf(s, p)); card.append(vid); vid.play().catch(() => {});
+      };
+      const dl = add('button', 'Download' + tag, row); dl.className = 'sec';
+      dl.onclick = async () => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(await blobOf(s, p));
+        const d = new Date(s.start), z = n => String(n).padStart(2, '0');
+        a.download = 'mrm-live-' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + (s.parts > 1 ? '-part' + p : '') + '.' + ext;
+        document.body.append(a); a.click(); a.remove();
+      };
+    }
+    const del = add('button', 'Delete', row); del.className = 'sec';
+    del.onclick = async () => { if (confirm('Delete this recording from the phone?')) { await dbDelete(s.sid); recView(); } };
+  });
+}
+
+/* ---------- VIEWERS (WhatsApp link): open this page normally ---------- */
+function viewerMode() {
+  const room = params.get('room');
+  if (!room) return say('Open the link shared in the WhatsApp group.');
+  say('Connecting to the live session…');
+  let peer;
+  function join() {
+    let got = false, timer;
+    const retry = () => { clearTimeout(timer); say('Waiting for the broadcast to start…'); $('live').hidden = true; setTimeout(() => { try { peer.destroy(); } catch(e){} join(); }, 4000); };
+    peer = new Peer(undefined, ICE);
+    peer.on('open', () => {
+      const conn = peer.connect(hostId(room));
+      conn.on('open', () => { got = true; say('Connected. Starting video…'); });
+      conn.on('close', retry);
+      timer = setTimeout(() => { if (!got) retry(); }, 12000);
+    });
+    peer.on('call', call => {
+      got = true; clearTimeout(timer);
+      call.answer();
+      call.on('stream', s => {
+        v.srcObject = s; v.play().catch(() => {}); say('');
+        $('live').hidden = false; $('unmute').hidden = !v.muted;
+      });
+      call.on('close', retry);
+    });
+    peer.on('error', () => { if (!got) retry(); });
+  }
+  join();
+  $('unmute').onclick = () => { v.muted = false; $('unmute').hidden = true; };
+}
+
+/* start the right screen (after everything above is defined) */
+if (params.has('recordings')) recView(); else if (isHost) hostMode(); else viewerMode();
+</script>
+</body>
+</html>
